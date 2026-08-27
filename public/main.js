@@ -9,12 +9,13 @@ const CASE_WIDTH = 0.72; // profondeur quand le boitier est range spine-out
 const CASE_THICKNESS = 0.075; // epaisseur de la tranche visible sur l'etagere
 const CASE_GAP = 0.006;
 
-const SHELF_WIDTH = 4.2;
-const SHELF_PLANK_THICKNESS = 0.06;
-const SHELF_LEVEL_HEIGHT = CASE_HEIGHT + 0.22;
+const ITEMS_PER_ROW = 30; // nombre fixe de boitiers par etage
+const SHELF_PLANK_THICKNESS = 0.05;
+const SHELF_LEVEL_HEIGHT = CASE_HEIGHT + 0.16;
 const SHELF_DEPTH = CASE_WIDTH + 0.1;
 
-const STAGE_POSITION = new THREE.Vector3(0, 1.55, 2.3);
+const STAGE_DISTANCE = 2.1; // distance devant la camera ou vient se placer le boitier
+const FRONT_FACING_OFFSET = -Math.PI / 2; // correction pour que +X (jaquette) fasse face a la cible du lookAt
 
 // ---------------------------------------------------------------------------
 // Etat global
@@ -25,8 +26,15 @@ let films = [];
 let caseMeshes = []; // { group, mesh, film, originalPosition, originalQuaternion, state }
 let selected = null; // reference vers un element de caseMeshes
 let isFlipped = false;
+let hoveredEntry = null;
+let keyboardIndex = -1; // position courante dans caseMeshes pour la navigation au clavier
 
 const clock = new THREE.Clock();
+const animating = new Map(); // entry -> { targetPos, targetQuat }
+
+const forwardVector = new THREE.Vector3();
+const stageTargetPosition = new THREE.Vector3();
+const lookAtHelper = new THREE.Object3D();
 
 init();
 loadFilms();
@@ -38,11 +46,11 @@ function init() {
   const canvas = document.getElementById('scene-canvas');
 
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0a0806);
-  scene.fog = new THREE.Fog(0x0a0806, 6, 16);
+  scene.background = new THREE.Color(0x05040a);
+  scene.fog = new THREE.FogExp2(0x0a0620, 0.035);
 
-  camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
-  camera.position.set(0, 1.6, 5.5);
+  camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 100);
+  camera.position.set(0, 2.1, 6.2);
 
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -52,11 +60,11 @@ function init() {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
   controls = new OrbitControls(camera, renderer.domElement);
-  controls.target.set(0, 1.3, 0);
+  controls.target.set(0, 2, 0);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
-  controls.minDistance = 2.5;
-  controls.maxDistance = 7;
+  controls.minDistance = 3;
+  controls.maxDistance = 9;
   controls.maxPolarAngle = Math.PI / 2.05;
   controls.update();
 
@@ -70,7 +78,9 @@ function init() {
   scene.add(shelfGroup);
 
   window.addEventListener('resize', onResize);
+  window.addEventListener('keydown', onKeyDown);
   renderer.domElement.addEventListener('pointerdown', onPointerDown);
+  renderer.domElement.addEventListener('pointermove', onPointerMove);
 
   document.getElementById('btn-flip').addEventListener('click', flipSelected);
   document.getElementById('btn-validate').addEventListener('click', validateSelected);
@@ -80,21 +90,31 @@ function init() {
 }
 
 function setupLights() {
-  const ambient = new THREE.AmbientLight(0x3a2f22, 1.1);
+  const ambient = new THREE.AmbientLight(0x18102e, 1.4);
   scene.add(ambient);
 
-  const warm = new THREE.PointLight(0xffcf8a, 18, 12, 2);
-  warm.position.set(0, 3.2, 1.5);
-  warm.castShadow = true;
-  warm.shadow.mapSize.set(1024, 1024);
-  scene.add(warm);
+  // Neon cyan (cote gauche)
+  const cyan = new THREE.PointLight(0x00e5ff, 14, 14, 2);
+  cyan.position.set(-3.5, 3, 2.5);
+  scene.add(cyan);
 
-  const fill = new THREE.PointLight(0xffe4b0, 6, 10, 2);
-  fill.position.set(-2.5, 2, 2.5);
-  scene.add(fill);
+  // Neon magenta (cote droit)
+  const magenta = new THREE.PointLight(0xff2fd6, 14, 14, 2);
+  magenta.position.set(3.5, 2.5, 2.5);
+  scene.add(magenta);
 
-  const rim = new THREE.PointLight(0x8899ff, 3, 10, 2);
-  rim.position.set(2.5, 1.5, -1);
+  // Spot principal au-dessus de l'etagere, teinte violette
+  const spot = new THREE.SpotLight(0xb388ff, 22, 16, Math.PI / 4, 0.4, 1.5);
+  spot.position.set(0, 6, 3);
+  spot.target.position.set(0, 2, 0);
+  spot.castShadow = true;
+  spot.shadow.mapSize.set(1024, 1024);
+  scene.add(spot);
+  scene.add(spot.target);
+
+  // Lueur froide en fond (contre-jour bleu)
+  const rim = new THREE.PointLight(0x3355ff, 8, 12, 2);
+  rim.position.set(0, 3.5, -3);
   scene.add(rim);
 }
 
@@ -105,27 +125,46 @@ function setupFloor() {
   canvas.height = size;
   const ctx = canvas.getContext('2d');
 
-  ctx.fillStyle = '#1a1512';
+  ctx.fillStyle = '#0b0a12';
   ctx.fillRect(0, 0, size, size);
 
-  const tiles = 8;
-  const tileSize = size / tiles;
-  for (let y = 0; y < tiles; y++) {
-    for (let x = 0; x < tiles; x++) {
-      if ((x + y) % 2 === 0) {
-        ctx.fillStyle = 'rgba(255,255,255,0.025)';
-        ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
-      }
-    }
+  // Grain d'asphalte
+  for (let i = 0; i < 3000; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const shade = Math.random() * 30;
+    ctx.fillStyle = `rgba(${shade + 10}, ${shade + 8}, ${shade + 18}, 0.5)`;
+    ctx.fillRect(x, y, 1.5, 1.5);
+  }
+
+  // Joints de dalles
+  ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+  ctx.lineWidth = 2;
+  const tiles = 6;
+  for (let i = 1; i < tiles; i++) {
+    const p = (size / tiles) * i;
+    ctx.beginPath();
+    ctx.moveTo(p, 0);
+    ctx.lineTo(p, size);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, p);
+    ctx.lineTo(size, p);
+    ctx.stroke();
   }
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(6, 6);
+  texture.repeat.set(8, 8);
 
-  const floorGeo = new THREE.PlaneGeometry(40, 40);
-  const floorMat = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.85, metalness: 0.1 });
+  const floorGeo = new THREE.PlaneGeometry(50, 50);
+  const floorMat = new THREE.MeshStandardMaterial({
+    map: texture,
+    roughness: 0.25,
+    metalness: 0.4,
+    color: 0x9999bb,
+  });
   const floor = new THREE.Mesh(floorGeo, floorMat);
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
@@ -133,9 +172,9 @@ function setupFloor() {
 }
 
 // ---------------------------------------------------------------------------
-// Texture de bois procedurale (pour l'etagere)
+// Texture metal sombre procedurale (rayonnage industriel de videoclub)
 // ---------------------------------------------------------------------------
-function createWoodTexture() {
+function createShelfMetalTexture() {
   const w = 512;
   const h = 512;
   const canvas = document.createElement('canvas');
@@ -144,35 +183,26 @@ function createWoodTexture() {
   const ctx = canvas.getContext('2d');
 
   const base = ctx.createLinearGradient(0, 0, 0, h);
-  base.addColorStop(0, '#6b4226');
-  base.addColorStop(0.5, '#5a3620');
-  base.addColorStop(1, '#4a2c1a');
+  base.addColorStop(0, '#2a2a34');
+  base.addColorStop(0.5, '#1c1c24');
+  base.addColorStop(1, '#14141a');
   ctx.fillStyle = base;
   ctx.fillRect(0, 0, w, h);
 
-  for (let i = 0; i < 90; i++) {
+  // Reflets metalliques horizontaux
+  for (let i = 0; i < 40; i++) {
     const y = Math.random() * h;
-    const grainHeight = 1 + Math.random() * 3;
-    ctx.strokeStyle = `rgba(30, 15, 8, ${0.06 + Math.random() * 0.1})`;
-    ctx.lineWidth = grainHeight;
+    ctx.strokeStyle = `rgba(180, 190, 220, ${0.03 + Math.random() * 0.06})`;
+    ctx.lineWidth = 1 + Math.random() * 2;
     ctx.beginPath();
     ctx.moveTo(0, y);
-    for (let x = 0; x <= w; x += 32) {
-      const wob = Math.sin(x * 0.02 + y) * 6 + (Math.random() - 0.5) * 4;
-      ctx.lineTo(x, y + wob);
-    }
+    ctx.lineTo(w, y);
     ctx.stroke();
   }
 
-  for (let i = 0; i < 4; i++) {
-    const y = Math.random() * h;
-    ctx.strokeStyle = 'rgba(20, 10, 5, 0.35)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(w, y + (Math.random() - 0.5) * 20);
-    ctx.stroke();
-  }
+  // Legere teinte violette (reflet neon ambiant)
+  ctx.fillStyle = 'rgba(120, 60, 200, 0.06)';
+  ctx.fillRect(0, 0, w, h);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = THREE.RepeatWrapping;
@@ -184,44 +214,63 @@ function createWoodTexture() {
 // Construction de l'etagere + placement des boitiers
 // ---------------------------------------------------------------------------
 function buildShelf(filmsList) {
-  const woodTexture = createWoodTexture();
-  const woodMat = new THREE.MeshStandardMaterial({ map: woodTexture, roughness: 0.75, metalness: 0.05 });
+  const metalTexture = createShelfMetalTexture();
+  const metalMat = new THREE.MeshStandardMaterial({ map: metalTexture, roughness: 0.4, metalness: 0.7 });
 
-  const perRow = Math.max(1, Math.floor(SHELF_WIDTH / (CASE_THICKNESS + CASE_GAP)));
+  const perRow = ITEMS_PER_ROW;
   const rowCount = Math.max(1, Math.ceil(filmsList.length / perRow));
+  const shelfWidth = perRow * (CASE_THICKNESS + CASE_GAP) + 0.12;
 
   const totalHeight = rowCount * SHELF_LEVEL_HEIGHT + SHELF_PLANK_THICKNESS;
   const startY = 0.05;
 
-  // Panneaux lateraux
+  // Montants lateraux (metal fin, look rayonnage industriel)
   const sideGeo = new THREE.BoxGeometry(SHELF_PLANK_THICKNESS, totalHeight, SHELF_DEPTH);
-  const leftSide = new THREE.Mesh(sideGeo, woodMat);
-  leftSide.position.set(-SHELF_WIDTH / 2 - SHELF_PLANK_THICKNESS / 2, startY + totalHeight / 2, 0);
+  const leftSide = new THREE.Mesh(sideGeo, metalMat);
+  leftSide.position.set(-shelfWidth / 2 - SHELF_PLANK_THICKNESS / 2, startY + totalHeight / 2, 0);
   leftSide.castShadow = true;
   leftSide.receiveShadow = true;
   shelfGroup.add(leftSide);
 
   const rightSide = leftSide.clone();
-  rightSide.position.x = SHELF_WIDTH / 2 + SHELF_PLANK_THICKNESS / 2;
+  rightSide.position.x = shelfWidth / 2 + SHELF_PLANK_THICKNESS / 2;
   shelfGroup.add(rightSide);
 
-  // Panneau arriere
-  const backGeo = new THREE.BoxGeometry(SHELF_WIDTH + SHELF_PLANK_THICKNESS * 2, totalHeight, 0.03);
-  const backMat = new THREE.MeshStandardMaterial({ color: 0x241a12, roughness: 0.9 });
+  // Panneau arriere sombre
+  const backGeo = new THREE.BoxGeometry(shelfWidth + SHELF_PLANK_THICKNESS * 2, totalHeight, 0.03);
+  const backMat = new THREE.MeshStandardMaterial({ color: 0x0d0d14, roughness: 0.6, metalness: 0.3 });
   const back = new THREE.Mesh(backGeo, backMat);
   back.position.set(0, startY + totalHeight / 2, -SHELF_DEPTH / 2);
   back.receiveShadow = true;
   shelfGroup.add(back);
 
-  // Etageres horizontales (une sous chaque rangee + une tout en haut)
-  const plankGeo = new THREE.BoxGeometry(SHELF_WIDTH + SHELF_PLANK_THICKNESS * 2, SHELF_PLANK_THICKNESS, SHELF_DEPTH);
+  // Etageres horizontales + tube neon lumineux sous chaque niveau
+  const plankGeo = new THREE.BoxGeometry(shelfWidth + SHELF_PLANK_THICKNESS * 2, SHELF_PLANK_THICKNESS, SHELF_DEPTH);
+  const neonColors = [0x00e5ff, 0xff2fd6];
+
   for (let level = 0; level <= rowCount; level++) {
-    const plank = new THREE.Mesh(plankGeo, woodMat);
+    const plank = new THREE.Mesh(plankGeo, metalMat);
     plank.position.set(0, startY + level * SHELF_LEVEL_HEIGHT, 0);
     plank.castShadow = true;
     plank.receiveShadow = true;
     shelfGroup.add(plank);
+
+    // Tube neon fin sous chaque etagere (sauf la toute derniere du haut)
+    if (level < rowCount) {
+      const neonColor = neonColors[level % neonColors.length];
+      const tubeGeo = new THREE.BoxGeometry(shelfWidth, 0.015, 0.015);
+      const tubeMat = new THREE.MeshBasicMaterial({ color: neonColor });
+      const tube = new THREE.Mesh(tubeGeo, tubeMat);
+      tube.position.set(0, startY + level * SHELF_LEVEL_HEIGHT - SHELF_PLANK_THICKNESS / 2 - 0.02, SHELF_DEPTH / 2 - 0.02);
+      shelfGroup.add(tube);
+
+      const tubeLight = new THREE.PointLight(neonColor, 2.5, 3, 2);
+      tubeLight.position.copy(tube.position);
+      shelfGroup.add(tubeLight);
+    }
   }
+
+  buildSign(totalHeight, shelfWidth);
 
   // Placement des boitiers
   filmsList.forEach((film, i) => {
@@ -243,6 +292,48 @@ function buildShelf(filmsList) {
     shelfGroup.add(caseEntry.group);
     caseMeshes.push(caseEntry);
   });
+
+  controls.target.set(0, totalHeight * 0.45, 0);
+  camera.position.set(0, totalHeight * 0.55, Math.max(6, totalHeight * 1.5));
+  controls.maxDistance = Math.max(9, totalHeight * 2.2);
+  controls.update();
+}
+
+// ---- Enseigne neon "VIDEO CLUB" flottante au-dessus de l'etagere ----
+function buildSign(totalHeight, shelfWidth) {
+  const w = 1024;
+  const h = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+
+  ctx.clearRect(0, 0, w, h);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = 'bold 110px "Arial Black", sans-serif';
+
+  // Halo
+  ctx.shadowColor = '#ff2fd6';
+  ctx.shadowBlur = 35;
+  ctx.fillStyle = '#ff2fd6';
+  ctx.fillText('VIDEO CLUB', w / 2, h / 2);
+
+  ctx.shadowBlur = 15;
+  ctx.fillStyle = '#ffe0fb';
+  ctx.fillText('VIDEO CLUB', w / 2, h / 2);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  const signMat = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
+  const signWidth = Math.max(2.4, Math.min(4.5, shelfWidth * 1.15));
+  const signGeo = new THREE.PlaneGeometry(signWidth, signWidth * 0.25);
+  const sign = new THREE.Mesh(signGeo, signMat);
+  sign.position.set(0, totalHeight + 0.9, -0.3);
+  shelfGroup.add(sign);
+
+  const signLight = new THREE.PointLight(0xff2fd6, 6, 8, 2);
+  signLight.position.set(0, totalHeight + 0.9, 0.6);
+  shelfGroup.add(signLight);
 }
 
 // ---------------------------------------------------------------------------
@@ -353,14 +444,16 @@ function createCase(film) {
   const backMat = new THREE.MeshStandardMaterial({ map: backTexture, roughness: 0.5 });
 
   // Ordre des faces BoxGeometry : +X, -X, +Y, -Y, +Z, -Z
-  // +X = tranche visible sur l'etagere (spine-out) ; +Z = face avant (jaquette) ; -Z = dos
+  // Le box fait CASE_THICKNESS (X) x CASE_HEIGHT (Y) x CASE_WIDTH (Z).
+  // +X/-X = grandes faces (hauteur x largeur) => jaquette avant / dos.
+  // +Z/-Z = faces fines (epaisseur x hauteur) => tranche (visible sur l'etagere).
   const materials = [
-    spineMat, // +X (tranche, face exterieure sur l'etagere)
-    plasticMat, // -X
-    plasticMat, // +Y
-    plasticMat, // -Y
-    frontMat, // +Z (jaquette avant)
-    backMat, // -Z (dos)
+    frontMat, // +X (jaquette avant)
+    backMat, // -X (dos, synopsis)
+    plasticMat, // +Y (haut)
+    plasticMat, // -Y (bas)
+    spineMat, // +Z (tranche, face vers l'allee/le joueur sur l'etagere)
+    plasticMat, // -Z (tranche arriere, cachee contre le fond)
   ];
 
   const mesh = new THREE.Mesh(geo, materials);
@@ -378,13 +471,15 @@ function createCase(film) {
 
   const group = new THREE.Group();
   group.add(mesh);
-  // Le boitier est tourne de -90deg sur Y pour que la tranche (+X) pointe vers l'aisle (+Z)
-  group.rotation.y = -Math.PI / 2;
+  // Pas de rotation ici : a plat sur l'etagere, la tranche (+Z local) fait
+  // deja face a l'allee (+Z monde) et les faces avant/dos (+X/-X local)
+  // touchent les boitiers voisins, exactement comme sur un vrai rayonnage.
 
   return {
     group,
     mesh,
     film,
+    spineMat,
     originalPosition: null,
     originalQuaternion: null,
     state: 'shelved', // shelved | out | staged
@@ -448,15 +543,104 @@ function onPointerDown(event) {
   }
 }
 
+function onPointerMove(event) {
+  pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+  pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+  raycaster.setFromCamera(pointer, camera);
+
+  const shelvedEntries = caseMeshes.filter((c) => c.state === 'shelved');
+  const meshes = shelvedEntries.map((c) => c.mesh);
+  const intersects = raycaster.intersectObjects(meshes, false);
+
+  const hitEntry = intersects.length > 0
+    ? shelvedEntries.find((c) => c.mesh === intersects[0].object)
+    : null;
+
+  if (hitEntry === hoveredEntry) return;
+
+  // Retire le highlight du precedent
+  if (hoveredEntry) {
+    hoveredEntry.spineMat.emissive.setHex(0x000000);
+  }
+
+  hoveredEntry = hitEntry;
+
+  if (hoveredEntry) {
+    hoveredEntry.spineMat.emissive.setHex(0x2a1a44);
+    showHoverPreview(hoveredEntry.film);
+    renderer.domElement.style.cursor = 'pointer';
+  } else {
+    hideHoverPreview();
+    renderer.domElement.style.cursor = 'default';
+  }
+}
+
+function showHoverPreview(film) {
+  const preview = document.getElementById('hover-preview');
+  document.getElementById('hover-title').textContent = film.title;
+  document.getElementById('hover-year').textContent = film.year || '';
+  preview.classList.remove('hidden');
+}
+
+function hideHoverPreview() {
+  document.getElementById('hover-preview').classList.add('hidden');
+}
+
+// ---- Navigation clavier : fleches pour parcourir, Entree/R/S/Echap pour agir ----
+function onKeyDown(event) {
+  const key = event.key.toLowerCase();
+
+  if (key === 'arrowright' || key === 'arrowdown') {
+    event.preventDefault();
+    navigate(1);
+  } else if (key === 'arrowleft' || key === 'arrowup') {
+    event.preventDefault();
+    navigate(-1);
+  } else if (key === 'enter') {
+    event.preventDefault();
+    validateSelected();
+  } else if (key === 'r') {
+    event.preventDefault();
+    flipSelected();
+  } else if (key === 's' || key === 'escape') {
+    event.preventDefault();
+    deselect();
+  }
+}
+
+function navigate(step) {
+  if (caseMeshes.length === 0) return;
+
+  if (keyboardIndex === -1) {
+    keyboardIndex = 0;
+  } else {
+    keyboardIndex = (keyboardIndex + step + caseMeshes.length) % caseMeshes.length;
+  }
+
+  const entry = caseMeshes[keyboardIndex];
+  if (!entry) return;
+
+  if (selected && selected !== entry) {
+    deselect();
+  }
+
+  if (entry.state === 'shelved') {
+    selectCase(entry);
+  }
+}
+
 function selectCase(entry) {
+  if (hoveredEntry === entry) {
+    entry.spineMat.emissive.setHex(0x000000);
+    hoveredEntry = null;
+    hideHoverPreview();
+  }
+
   selected = entry;
   entry.state = 'staged';
   isFlipped = false;
-
-  const target = STAGE_POSITION.clone();
-  const targetQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, 0));
-
-  animateTo(entry, target, targetQuat);
+  keyboardIndex = caseMeshes.indexOf(entry);
 
   showDetailPanel(entry.film);
   document.getElementById('hint').classList.add('hidden');
@@ -465,9 +649,6 @@ function selectCase(entry) {
 function flipSelected() {
   if (!selected) return;
   isFlipped = !isFlipped;
-  const targetY = isFlipped ? Math.PI : 0;
-  const targetQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, targetY, 0));
-  animateTo(selected, STAGE_POSITION.clone(), targetQuat);
 }
 
 function validateSelected() {
@@ -494,8 +675,6 @@ function deselect() {
 // ---------------------------------------------------------------------------
 // Animation simple (lerp/slerp vers une cible)
 // ---------------------------------------------------------------------------
-const animating = new Map(); // entry -> { targetPos, targetQuat }
-
 function animateTo(entry, targetPos, targetQuat) {
   animating.set(entry, { targetPos, targetQuat });
 }
@@ -514,6 +693,23 @@ function updateAnimations(delta) {
       animating.delete(entry);
     }
   });
+}
+
+// ---- Fait suivre le boitier selectionne devant la camera, quel que soit
+// l'angle de vue actuel (recalcule a chaque frame) ----
+function updateStagedCase(delta) {
+  if (!selected || selected.state !== 'staged') return;
+
+  camera.getWorldDirection(forwardVector);
+  stageTargetPosition.copy(camera.position).addScaledVector(forwardVector, STAGE_DISTANCE);
+
+  lookAtHelper.position.copy(stageTargetPosition);
+  lookAtHelper.lookAt(camera.position);
+  lookAtHelper.rotateY(FRONT_FACING_OFFSET + (isFlipped ? Math.PI : 0));
+
+  const speed = Math.min(1, delta * 8);
+  selected.group.position.lerp(stageTargetPosition, speed);
+  selected.group.quaternion.slerp(lookAtHelper.quaternion, speed);
 }
 
 // ---------------------------------------------------------------------------
@@ -547,6 +743,7 @@ function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta();
   updateAnimations(delta);
+  updateStagedCase(delta);
   controls.update();
   renderer.render(scene, camera);
 }

@@ -8,8 +8,8 @@ html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #0a0806;
-  font-family: 'Georgia', 'Times New Roman', serif;
+  background: #05040a;
+  font-family: 'Courier New', 'Consolas', monospace;
 }
 
 #scene-canvas {
@@ -22,7 +22,7 @@ html, body {
 #loading-screen {
   position: fixed;
   inset: 0;
-  background: #0a0806;
+  background: #05040a;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -37,20 +37,22 @@ html, body {
 
 .loading-content {
   text-align: center;
-  color: #e8c988;
+  color: #ff2fd6;
 }
 
 .loading-title {
-  font-size: 2.5rem;
-  letter-spacing: 0.4rem;
+  font-size: 2.8rem;
+  font-weight: bold;
+  letter-spacing: 0.5rem;
   margin-bottom: 2rem;
-  text-shadow: 0 0 20px rgba(232, 201, 136, 0.4);
+  color: #ff2fd6;
+  text-shadow: 0 0 10px #ff2fd6, 0 0 30px #ff2fd6, 0 0 60px rgba(255, 47, 214, 0.5);
 }
 
 .loading-bar {
   width: 280px;
   height: 4px;
-  background: rgba(232, 201, 136, 0.15);
+  background: rgba(0, 229, 255, 0.15);
   border-radius: 2px;
   overflow: hidden;
   margin: 0 auto 1rem;
@@ -59,13 +61,15 @@ html, body {
 .loading-bar-fill {
   height: 100%;
   width: 0%;
-  background: #e8c988;
+  background: #00e5ff;
+  box-shadow: 0 0 10px #00e5ff;
   transition: width 0.3s ease;
 }
 
 .loading-text {
   font-size: 0.85rem;
-  opacity: 0.7;
+  color: #00e5ff;
+  opacity: 0.8;
   letter-spacing: 0.05rem;
 }
 
@@ -75,13 +79,14 @@ html, body {
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
-  color: rgba(232, 201, 136, 0.85);
-  font-size: 0.9rem;
+  color: #00e5ff;
+  font-size: 0.85rem;
   letter-spacing: 0.03rem;
-  background: rgba(10, 8, 6, 0.55);
+  background: rgba(5, 4, 10, 0.7);
   padding: 8px 18px;
   border-radius: 20px;
-  border: 1px solid rgba(232, 201, 136, 0.2);
+  border: 1px solid rgba(0, 229, 255, 0.35);
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.15);
   pointer-events: none;
   transition: opacity 0.4s ease;
   z-index: 10;
@@ -91,13 +96,46 @@ html, body {
   opacity: 0;
 }
 
+/* ---- Preview au survol d'un boitier ---- */
+.hover-preview {
+  position: fixed;
+  top: 12%;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  z-index: 15;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.hover-preview.hidden {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-10px);
+}
+
+.hover-title {
+  font-size: 2.4rem;
+  font-weight: bold;
+  color: #00e5ff;
+  text-shadow: 0 0 8px #00e5ff, 0 0 24px rgba(0, 229, 255, 0.5);
+  letter-spacing: 0.02rem;
+}
+
+.hover-year {
+  font-size: 1.1rem;
+  color: #ff2fd6;
+  text-shadow: 0 0 10px rgba(255, 47, 214, 0.6);
+  margin-top: 4px;
+  letter-spacing: 0.1rem;
+}
+
 /* ---- Panneau de details du film selectionne ---- */
 .detail-panel {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  background: linear-gradient(180deg, rgba(10, 8, 6, 0) 0%, rgba(10, 8, 6, 0.92) 25%, rgba(10, 8, 6, 0.97) 100%);
+  background: linear-gradient(180deg, rgba(5, 4, 10, 0) 0%, rgba(5, 4, 10, 0.94) 25%, rgba(5, 4, 10, 0.98) 100%);
   padding: 80px 40px 40px;
   display: flex;
   justify-content: center;
@@ -114,26 +152,28 @@ html, body {
 .detail-content {
   max-width: 560px;
   width: 100%;
-  color: #f0e6d2;
+  color: #e8e0ff;
 }
 
 #detail-title {
-  font-size: 1.8rem;
+  font-size: 1.7rem;
   margin-bottom: 8px;
-  color: #e8c988;
+  color: #ff2fd6;
+  text-shadow: 0 0 12px rgba(255, 47, 214, 0.4);
 }
 
 .detail-meta {
-  font-size: 0.9rem;
-  opacity: 0.75;
+  font-size: 0.85rem;
+  color: #00e5ff;
+  opacity: 0.9;
   margin-bottom: 16px;
   letter-spacing: 0.03rem;
 }
 
 .detail-overview {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   line-height: 1.5;
-  opacity: 0.9;
+  opacity: 0.85;
   margin-bottom: 24px;
   max-height: 100px;
   overflow-y: auto;
@@ -147,37 +187,40 @@ html, body {
 
 .detail-actions button {
   font-family: inherit;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   padding: 10px 22px;
   border-radius: 4px;
-  border: 1px solid rgba(232, 201, 136, 0.4);
+  border: 1px solid rgba(0, 229, 255, 0.5);
   background: transparent;
-  color: #e8c988;
+  color: #00e5ff;
   cursor: pointer;
   letter-spacing: 0.03rem;
-  transition: background 0.2s ease, transform 0.15s ease;
+  transition: background 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
 }
 
 .detail-actions button:hover {
-  background: rgba(232, 201, 136, 0.12);
+  background: rgba(0, 229, 255, 0.12);
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.3);
   transform: translateY(-1px);
 }
 
 .detail-actions button.primary {
-  background: #e8c988;
-  color: #1a1410;
-  border-color: #e8c988;
+  background: #ff2fd6;
+  color: #05040a;
+  border-color: #ff2fd6;
   font-weight: bold;
 }
 
 .detail-actions button.primary:hover {
-  background: #f0d59e;
+  background: #ff5fe0;
+  box-shadow: 0 0 16px rgba(255, 47, 214, 0.6);
 }
 
 .detail-actions button:disabled {
   opacity: 0.35;
   cursor: not-allowed;
   transform: none;
+  box-shadow: none;
 }
 
 .hidden {
