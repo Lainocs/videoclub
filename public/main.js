@@ -656,7 +656,12 @@ function validateSelected() {
   const { imdbId } = selected.film;
   if (!imdbId) return;
 
-  const stremioUrl = `stremio://detail/movie/${imdbId}/${imdbId}`;
+  // Important : 3 slashs (host vide), pas 2. Avec 2 slashs, Stremio
+  // interprete "detail" comme un nom de domaine d'ou proviendrait un addon
+  // (meme format que stremio://mon-addon.exemple.com/manifest.json), ce qui
+  // declenche l'erreur "addon invalide". Avec 3 slashs, le chemin /detail/...
+  // est traite comme une navigation interne vers la fiche du film.
+  const stremioUrl = `stremio:///detail/movie/${imdbId}/${imdbId}`;
   window.location.href = stremioUrl;
 }
 
