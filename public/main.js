@@ -16,11 +16,12 @@ const SHELF_DEPTH = CASE_WIDTH + 0.1;
 
 const STAGE_DISTANCE = 2.1; // distance devant la camera ou vient se placer le boitier
 const FRONT_FACING_OFFSET = -Math.PI / 2; // correction pour que +X (jaquette) fasse face a la cible du lookAt
+const HAND_LIGHT_INTENSITY = 3.2; // eclairage du boitier tenu en main
 
 // ---------------------------------------------------------------------------
 // Etat global
 // ---------------------------------------------------------------------------
-let scene, camera, renderer, controls, raycaster, pointer;
+let scene, camera, renderer, controls, raycaster, pointer, handLight;
 let shelfGroup;
 let films = [];
 let caseMeshes = []; // { group, mesh, film, originalPosition, originalQuaternion, state }
@@ -116,6 +117,21 @@ function setupLights() {
   const rim = new THREE.PointLight(0x3355ff, 8, 12, 2);
   rim.position.set(0, 3.5, -3);
   scene.add(rim);
+
+  // Lumiere "de lecture" portee par la camera : le boitier en main est
+  // toujours eclaire, meme quand on s'est eloigne des neons de l'etagere.
+  // Sans attenuation (decay 0) et eteinte tant qu'aucun film n'est sorti.
+  handLight = new THREE.SpotLight(0xfff1e6, 0, 6, Math.PI / 7, 0.6, 0);
+  handLight.position.set(0.35, 0.55, 0.1); // un peu au-dessus et a droite de l'oeil
+  camera.add(handLight);
+  scene.add(camera); // necessaire pour que les enfants de la camera soient rendus
+}
+
+function updateHandLight(delta) {
+  const tenu = selected && selected.state === 'staged';
+  if (tenu) handLight.target = selected.group;
+  const cible = tenu ? HAND_LIGHT_INTENSITY : 0;
+  handLight.intensity += (cible - handLight.intensity) * Math.min(1, delta * 6);
 }
 
 function setupFloor() {
@@ -749,6 +765,7 @@ function animate() {
   const delta = clock.getDelta();
   updateAnimations(delta);
   updateStagedCase(delta);
+  updateHandLight(delta);
   controls.update();
   renderer.render(scene, camera);
 }
