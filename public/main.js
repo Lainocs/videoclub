@@ -57,7 +57,7 @@ const composer = new EffectComposer(
   new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }),
 );
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2), 0.35, 0.55, 0.95);
+const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2), 0.22, 0.5, 0.95);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 const finish = new ShaderPass({
@@ -103,7 +103,7 @@ scene.add(hemi);
 const rowLights = [];
 const signMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 const SIGN_COLOR = new THREE.Color(1.05, 1.0, 0.95);
-const ROW_LIGHT_INTENSITY = 8;
+const ROW_LIGHT_INTENSITY = 5;
 
 // Lumiere de presentation : suit la camera, s'allume quand un film est sorti
 const focusLight = new THREE.SpotLight(0xfff3e4, 0, 0, 0.55, 0.7, 2);
@@ -124,7 +124,7 @@ const M = {
   cabinet: new THREE.MeshStandardMaterial({ color: 0x1d1b19, roughness: 0.6, envMapIntensity: 0.25 }),
   floor: new THREE.MeshStandardMaterial({ color: 0x151311, roughness: 0.5, envMapIntensity: 0.25 }),
   plastic: new THREE.MeshPhysicalMaterial({ color: 0x0c0c0d, roughness: 0.32, clearcoat: 0.6, envMapIntensity: 0.7 }),
-  strip: new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.92, 0.8).multiplyScalar(4) }),
+  strip: new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.92, 0.8).multiplyScalar(2.2) }),
 };
 
 // ---------------------------------------------------------------------------
@@ -532,7 +532,7 @@ function buildStore(sorted) {
     const group = new THREE.Group();
     const body = new THREE.Mesh(caseGeo, M.plastic);
     const frontMat = new THREE.MeshPhysicalMaterial({
-      color: 0x1a1a1a, roughness: 0.6, clearcoat: 1, clearcoatRoughness: 0.14, envMapIntensity: 0.6,
+      color: 0x1a1a1a, roughness: 0.6, clearcoat: 0.5, clearcoatRoughness: 0.22, envMapIntensity: 0.25,
     });
     const front = new THREE.Mesh(coverGeo, frontMat);
     front.position.z = CASE.t / 2 + 0.0003;
@@ -1138,7 +1138,7 @@ function updateLights(dt) {
   state.focusAmt = damp(state.focusAmt, state.focus ? 1 : 0, 4, dt);
   const f = state.focusAmt;
   rowLights.forEach((l) => { l.intensity = ROW_LIGHT_INTENSITY * (1 - 0.88 * f); });
-  M.strip.color.setRGB(1, 0.92, 0.8).multiplyScalar(4 * (1 - 0.75 * f));
+  M.strip.color.setRGB(1, 0.92, 0.8).multiplyScalar(2.2 * (1 - 0.75 * f));
   signMat.color.copy(SIGN_COLOR).multiplyScalar(1 - 0.8 * f);
   hemi.intensity = 0.35 * (1 - 0.8 * f);
   focusLight.intensity = 2.2 * f;
