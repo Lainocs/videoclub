@@ -1,8 +1,8 @@
 # Videoclub 3D
 
-Un videoclub en 3D (Three.js) construit a partir de ta watchlist Letterboxd : une etagere en
-bois avec des boitiers DVD ranges par tranche. Clique sur un boitier pour le sortir, retourne-le
-pour voir le synopsis, et valide pour l'ouvrir directement dans Stremio.
+Un videoclub en 3D (Three.js) construit a partir de ta watchlist Letterboxd : un mur de
+boitiers DVD presentes jaquette face a toi. Sors un boitier, retourne-le pour lire le dos, et
+ouvre-le directement dans Stremio.
 
 ## Architecture
 
@@ -93,12 +93,11 @@ un usage perso.
 
 ## Utilisation
 
-- **Clic sur un boitier** : le sort de l'etagere et l'amene devant la camera, jaquette face a toi.
-- **Bouton "Retourner"** : fait pivoter le boitier pour voir le dos (synopsis, note).
-- **Bouton "Valider"** : ouvre l'app Stremio directement sur la fiche du film (necessite que
-  Stremio soit installe sur l'appareil et gere le protocole `stremio://`).
-- **Bouton "Remettre en rayon"** : range le boitier et permet d'en choisir un autre.
-- **Souris/tactile** : orbite autour de l'etagere (drag pour tourner, molette/pincer pour zoomer).
+- **Molette / glisser / flèches** : parcourir le rayon (classé de A à Z, index en bas).
+- **Clic sur un boîtier** (ou Entrée) : le sort du rayon. Glisser pour le tourner, clic dessus ou `F` pour le retourner.
+- **Ouvrir dans Stremio** (Entrée) : ouvre la fiche dans l'app Stremio (protocole `stremio://`).
+- **← / →** quand un film est sorti : film précédent / suivant. **Échap** : ranger.
+- **`/`** : recherche par titre ou réalisateur. **`R`** : un film au hasard.
 
 ## Limites connues
 

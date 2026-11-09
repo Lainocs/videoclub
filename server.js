@@ -92,26 +92,33 @@ async function enrichWithTmdb(film) {
       };
     }
 
-    // Appel separe pour recuperer l'IMDb ID (pas inclus dans /search)
-    let imdbId = null;
+    // Un seul appel detail : IMDb ID (Stremio), duree, genres, realisateur
+    let details = {};
     try {
-      const externalRes = await axios.get(
-        `https://api.themoviedb.org/3/movie/${match.id}/external_ids`,
-        { params: { api_key: TMDB_API_KEY } },
-      );
-      imdbId = externalRes.data.imdb_id || null;
+      const detailRes = await axios.get(`https://api.themoviedb.org/3/movie/${match.id}`, {
+        params: { api_key: TMDB_API_KEY, language: 'fr-FR', append_to_response: 'external_ids,credits' },
+      });
+      details = detailRes.data;
     } catch (err) {
-      imdbId = null;
+      details = {};
     }
+
+    const director = details.credits?.crew?.find((p) => p.job === 'Director')?.name || null;
+    const cast = (details.credits?.cast || []).slice(0, 3).map((p) => p.name);
 
     return {
       title: match.title || title,
+      originalTitle: match.original_title || null,
       year: match.release_date ? match.release_date.slice(0, 4) : year,
       letterboxdUrl: `https://letterboxd.com${film.slug}`,
       poster: match.poster_path ? `https://image.tmdb.org/t/p/w500${match.poster_path}` : null,
       overview: match.overview || null,
       rating: match.vote_average || null,
-      imdbId,
+      imdbId: details.external_ids?.imdb_id || details.imdb_id || null,
+      runtime: details.runtime || null,
+      genres: (details.genres || []).map((g) => g.name),
+      director,
+      cast,
     };
   } catch (err) {
     return {

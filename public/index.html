@@ -2,8 +2,11 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Videoclub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
   <script type="importmap">
     {
@@ -15,35 +18,61 @@
   </script>
 </head>
 <body>
-  <div id="loading-screen">
-    <div class="loading-content">
-      <div class="loading-title">VIDEOCLUB</div>
-      <div class="loading-bar"><div class="loading-bar-fill" id="loading-bar-fill"></div></div>
-      <div class="loading-text" id="loading-text">Ouverture du magasin...</div>
+  <canvas id="scene"></canvas>
+
+  <!-- Chargement -->
+  <div id="loader" class="loader">
+    <div class="loader-inner">
+      <div class="brand brand-lg">Videoclub<span>.</span></div>
+      <div class="loader-line"><div id="loader-fill"></div></div>
+      <div id="loader-text" class="mono">Ouverture du magasin</div>
     </div>
   </div>
 
-  <canvas id="scene-canvas"></canvas>
+  <!-- HUD -->
+  <header class="hud-top">
+    <div class="brand">Videoclub<span>.</span></div>
+    <div class="hud-top-right">
+      <span id="count" class="mono"></span>
+      <button id="btn-search" class="chip" title="Rechercher (/)">Rechercher <kbd>/</kbd></button>
+      <button id="btn-random" class="chip chip-accent" title="Au hasard (R)">Au hasard</button>
+    </div>
+  </header>
 
-  <div id="hint" class="hint">Clique sur un boitier pour le sortir de l'etagere</div>
-
-  <div id="hover-preview" class="hover-preview hidden">
-    <div id="hover-title" class="hover-title">Titre</div>
-    <div id="hover-year" class="hover-year">2000</div>
+  <div id="hover" class="hover">
+    <div id="hover-title" class="hover-title"></div>
+    <div id="hover-meta" class="mono hover-meta"></div>
   </div>
 
-  <div id="detail-panel" class="detail-panel hidden">
-    <div class="detail-content">
-      <h2 id="detail-title">Titre</h2>
-      <div id="detail-meta" class="detail-meta"></div>
-      <p id="detail-overview" class="detail-overview"></p>
-      <div class="detail-actions">
-        <button id="btn-flip">Retourner</button>
-        <button id="btn-validate" class="primary">Valider</button>
-        <button id="btn-back">Remettre en rayon</button>
+  <nav id="index" class="index"></nav>
+
+  <div id="hint" class="hint mono">Molette ou glisser pour parcourir · Clic pour sortir un film</div>
+
+  <!-- Recherche -->
+  <div id="search" class="search hidden">
+    <input id="search-input" type="text" placeholder="Un titre, un réalisateur…" autocomplete="off" spellcheck="false" />
+    <ul id="search-results"></ul>
+  </div>
+
+  <!-- Fiche -->
+  <aside id="sheet" class="sheet">
+    <div class="sheet-inner">
+      <div id="sheet-kicker" class="mono kicker"></div>
+      <h1 id="sheet-title"></h1>
+      <div id="sheet-original" class="original"></div>
+      <dl id="sheet-facts" class="facts"></dl>
+      <p id="sheet-overview" class="overview"></p>
+      <div class="actions">
+        <button id="btn-play" class="btn btn-primary">Ouvrir dans Stremio <kbd>↵</kbd></button>
+        <div class="actions-row">
+          <button id="btn-flip" class="btn">Retourner <kbd>F</kbd></button>
+          <a id="btn-lb" class="btn" target="_blank" rel="noopener">Letterboxd</a>
+          <button id="btn-back" class="btn">Ranger <kbd>Esc</kbd></button>
+        </div>
       </div>
+      <div class="mono drag-hint">Fais glisser le boîtier pour le tourner</div>
     </div>
-  </div>
+  </aside>
 
   <script type="module" src="main.js"></script>
 </body>
