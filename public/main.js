@@ -49,7 +49,7 @@ scene.fog = new THREE.Fog(0x0b0a09, 3.2, 8);
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
 
-const camera = new THREE.PerspectiveCamera(CAM.fov, window.innerWidth / window.innerHeight, 0.01, 30);
+const camera = new THREE.PerspectiveCamera(CAM.fov, window.innerWidth / window.innerHeight, 0.05, 30);
 scene.add(camera);
 
 const composer = new EffectComposer(
@@ -73,7 +73,7 @@ const finish = new ShaderPass({
   fragmentShader: /* glsl */ `
     uniform sampler2D tDiffuse; uniform float uTime; uniform float uVignette; uniform vec2 uRes;
     varying vec2 vUv;
-    float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+    float hash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
     void main() {
       vec2 c = vUv - 0.5;
       vec2 off = c * dot(c, c) * 0.012;
@@ -84,7 +84,10 @@ const finish = new ShaderPass({
       );
       float v = smoothstep(0.95, 0.2, length(c * vec2(1.0, 0.8)));
       col *= mix(1.0, v, uVignette);
-      col += (hash(floor(vUv * uRes) + fract(uTime) * 91.7) - 0.5) * 0.04;
+      // grain a 24 i/s, plus discret dans les noirs (sinon ca fourmille)
+      float luma = dot(col, vec3(0.299, 0.587, 0.114));
+      float frame = floor(uTime * 24.0);
+      col += (hash(floor(vUv * uRes) + mod(frame, 64.0) * 17.0) - 0.5) * 0.028 * (0.25 + 0.75 * smoothstep(0.0, 0.35, luma));
       gl_FragColor = vec4(col, 1.0);
     }`,
 });
@@ -417,9 +420,11 @@ function buildStore(sorted) {
   const back = new THREE.Mesh(new THREE.PlaneGeometry(wallW, backH), M.backPanel);
   back.position.set(0, BASE_Y + backH / 2 - 0.02, 0.001);
   scene.add(back);
-  box(wallW + 0.05, BASE_Y, 0.2, M.cabinet, 0, BASE_Y / 2, 0.1);
+  // meuble bas : caisson sous la planche (aucune face confondue, sinon z-fighting)
+  const cabH = BASE_Y - 0.012;
+  box(wallW + 0.04, cabH, 0.19, M.cabinet, 0, cabH / 2, 0.095);
   box(wallW + 0.05, 0.012, 0.2, M.lacquer, 0, BASE_Y - 0.006, 0.1);
-  box(wallW + 0.04, 0.06, 0.004, M.backPanel, 0, 0.03, 0.202); // plinthe
+  box(wallW + 0.03, 0.06, 0.006, M.backPanel, 0, 0.03, 0.193); // plinthe
 
   for (let k = 1; k < ROWS; k++) {
     box(wallW, SHELF_T, SHELF_DEPTH, M.lacquer, 0, BASE_Y + k * ROW_PITCH - SHELF_T / 2, SHELF_DEPTH / 2);
