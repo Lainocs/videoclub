@@ -175,6 +175,7 @@ app.get('/api/films', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+// écoute locale uniquement : nginx est le seul point d'entrée
+app.listen(PORT, '127.0.0.1', () => {
   console.log(`Videoclub en ligne sur http://localhost:${PORT}`);
 });
